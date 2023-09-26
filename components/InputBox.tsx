@@ -40,69 +40,70 @@ const InputBox: React.FC<InputBoxProps> = ({ onInputSubmit }) => {
 
     return matches;
   };
-
-
-const handleRemoveDuplicates = () => {
-  const lines = inputText.split('\n');
-  const inputData: { address: string; amount: string }[] = [];
-  const addressMap = new Map<string, number>();
-  const updatedValidationErrors: string[] = []; // Updated validation errors
-
-  lines.forEach((line, index) => {
-    const lineWithoutNumber = line.replace(/^\d+ \| /, '');
-    const extractedData = extractAddressAndAmount(lineWithoutNumber);
-
-    if (extractedData.length === 1) {
-      const { address, amount } = extractedData[0];
-
-      if (addressMap.has(address)) {
-        // Duplicate address found, skip this line and clear the error
-        updatedValidationErrors.splice(addressMap.get(address)!, 1); // Clear the error
+  const handleOperation = (
+    operation: (
+      addressMap: Map<string, number>,
+      inputData: { address: string; amount: string }[],
+      updatedValidationErrors: string[],
+      index: number,
+      address: string,
+      amount: string
+    ) => void
+  ) => {
+    // Common logic for handling duplicates or combining balances
+    const lines = inputText.split('\n');
+    const inputData: { address: string; amount: string }[] = [];
+    const addressMap = new Map<string, number>();
+    const updatedValidationErrors: string[] = []; // Updated validation errors
+  
+    lines.forEach((line, index) => {
+      const lineWithoutNumber = line.replace(/^\d+ \| /, '');
+      const extractedData = extractAddressAndAmount(lineWithoutNumber);
+  
+      if (extractedData.length === 1) {
+        const { address, amount } = extractedData[0];
+  
+        if (addressMap.has(address)) {
+          operation(addressMap, inputData, updatedValidationErrors, index, address, amount);
+        } else {
+          // New address
+          addressMap.set(address, inputData.length);
+          inputData.push({ address, amount });
+        }
       } else {
-        // New address
-        addressMap.set(address, inputData.length);
-        inputData.push({ address, amount });
+        // If the line doesn't match the expected format, keep it as is
+        inputData.push({ address: lineWithoutNumber, amount: '' });
       }
-    }
-  });
-
-  setInputText(inputData.map((data, index) => `${index + 1} | ${data.address} = ${data.amount}`).join('\n'));
-  setShowOptions(false);
-  setValidationErrors(updatedValidationErrors); // Update validation errors
-};
-
-const handleCombineBalances = () => {
-  const lines = inputText.split('\n');
-  const inputData: { address: string; amount: string }[] = [];
-  const addressMap = new Map<string, number>();
-  const updatedValidationErrors: string[] = []; // Updated validation errors
-
-  lines.forEach((line, index) => {
-    const lineWithoutNumber = line.replace(/^\d+ \| /, '');
-    const extractedData = extractAddressAndAmount(lineWithoutNumber);
-
-    if (extractedData.length === 1) {
-      const { address, amount } = extractedData[0];
-
-      if (addressMap.has(address)) {
-        // Duplicate address found, combine balances and clear the error
-        const duplicateIndex = addressMap.get(address)!;
-        const existingAmount = inputData[duplicateIndex].amount;
-        const combinedAmount = (parseFloat(existingAmount) + parseFloat(amount)).toString();
-        inputData[duplicateIndex].amount = combinedAmount;
-        updatedValidationErrors.splice(index, 1); // Clear the error
-      } else {
-        // New address
-        addressMap.set(address, inputData.length);
-        inputData.push({ address, amount });
-      }
-    }
-  });
-
-  setInputText(inputData.map((data, index) => `${index + 1} | ${data.address} = ${data.amount}`).join('\n'));
-  setShowOptions(false);
-  setValidationErrors(updatedValidationErrors); // Update validation errors
-};
+    });
+  
+    setInputText(
+      inputData
+        .map((data, index) => `${index + 1} | ${data.address}${data.amount ? ` = ${data.amount}` : ''}`)
+        .join('\n')
+    );
+    setShowOptions(false);
+    setValidationErrors(updatedValidationErrors); // Update validation errors
+  };
+  
+  
+  const handleRemoveDuplicates = () => {
+    handleOperation((addressMap, inputData, updatedValidationErrors, index, address) => {
+      updatedValidationErrors.splice(addressMap.get(address)!, 1); // Clear the error
+    });
+  };
+  
+  const handleCombineBalances = () => {
+    handleOperation((addressMap, inputData, updatedValidationErrors, index, address, amount) => {
+      // Duplicate address found, combine balances and clear the error
+      const duplicateIndex = addressMap.get(address)!;
+      const existingAmount = inputData[duplicateIndex].amount;
+      const combinedAmount = (parseFloat(existingAmount) + parseFloat(amount)).toString();
+      inputData[duplicateIndex].amount = combinedAmount;
+      updatedValidationErrors.splice(index, 1); // Clear the error
+    });
+  };
+  
+  
   const handleSubmit = () => {
     const lines = inputText.split('\n');
     const inputData: { address: string; amount: string }[] = [];
@@ -163,23 +164,20 @@ return (
       <div className='text-white text-sm'>separated by '=' or ','  or a space</div>
       <div className='text-gray-300 text-sm'>show example</div>
     </div>
-    {(validationErrors.length > 0 || showOptions) && (
-      <div className="mb-2 flex justify-between m-3">
-        {validationErrors.length > 0 && <div className='text-white'>Duplicate</div>}
-        <div className='flex justify-between'>
-          {validationErrors.length > 0 && (
-            <><button onClick={handleRemoveDuplicates} className=" text-red-500 p-2 mr-2">
-              Remove Duplicates
-            </button><span className='text-red-500 m-2'>|</span></>
-          )}
-          {validationErrors.length > 0 && (
-            <button onClick={handleCombineBalances} className=" text-red-500 p-2">
-              Combine Balances
-            </button>
-          )}
-        </div>
-      </div>
-    )}
+    <div className="mb-2 flex justify-between m-3">
+  {validationErrors.length > 0 && validationErrors.some((error) => error.includes('Duplicate')) && <div className='text-white'>Duplicate</div>}
+  {validationErrors.length > 0 && validationErrors.some((error) => error.includes('Duplicate')) && (
+    <div className='flex justify-between'>
+      <button onClick={handleRemoveDuplicates} className=" text-red-500 p-2 mr-2">
+        Remove Duplicates
+      </button>
+      <span className='text-red-500 m-2'>|</span>
+      <button onClick={handleCombineBalances} className=" text-red-500 p-2">
+        Combine Balances
+      </button>
+    </div>
+  )}
+</div>
     {validationErrors.length > 0 && (
       <div className="border border-red-500 text-red-500 mb-2 p-2 rounded w-full">
         {validationErrors.map((error, index) => (
